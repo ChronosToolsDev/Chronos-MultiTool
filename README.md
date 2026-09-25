@@ -39,13 +39,13 @@ stealer, UAC bypass, and multiple persistence layers, the Free Edition is a mini
 | # | Option | Output |
  |
 |---|--------|--------|
-| 1 | Build Grabber | `output/grabber.exe` — webhook exfil |
-| 2 | Build RAT | `output/rat.exe` — Discord bot C2 |
-| 3 | Build Keylogger | `output/keylogger.exe` — webhook logs |
-| 4 | Build Ransomware | `output/ransomware.exe` — AES file encryptor |
-| 5 | Obfuscator | `<name>_obf.py` — obfuscated source |
-| 6 | Script to EXE | `output/<name>.exe` — compile any `.py` |
-| 7 | EXE to Image | `<name>.png` + `extract_<name>.py` |
+| 1 | Build Grabber |
+| 2 | Build RAT |
+| 3 | Build Keylogger |
+| 4 | Build Ransomware |
+| 5 | Obfuscator |
+| 6 | Script to EXE |
+| 7 | EXE to Image | 
 | 0 | Exit | — |
 
 ### Grabber capabilities
