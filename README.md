@@ -36,7 +36,6 @@ stealer, UAC bypass, and multiple persistence layers, the Free Edition is a mini
 ### Builder menu
 
 | # | Option | Output |
- |
 |---|--------|--------|
 | 1 | Build Grabber |
 | 2 | Build RAT |
@@ -45,7 +44,7 @@ stealer, UAC bypass, and multiple persistence layers, the Free Edition is a mini
 | 5 | Obfuscator |
 | 6 | Script to EXE |
 | 7 | EXE to Image | 
-| 0 | Exit | — |
+| 0 | Exit |
 
 ### Grabber capabilities
 
