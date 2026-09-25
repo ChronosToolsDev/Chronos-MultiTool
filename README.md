@@ -5,7 +5,7 @@ Free builder that produces executables for the payloads
 both the most updated i gotta fix some stuff on the other ones  go to #releases for the exe 
 
 
-**Version:** 2.2.3 — 
+**Version:** 2.2.5 — 
 **Author:** Wasd
 **Platform:** Windows 10 / 11 (x64)
 **Runtime:** Python 3.10 – 3.12
