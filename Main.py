@@ -3,7 +3,7 @@
 """
 CHRONOS MULTITOOL – Free Edition 
 ==========================================================
-Version: 2.2.5 – Bata release 
+Version: 2.2.5 – release 
 Author: Wasd
 FEATURES:
 
