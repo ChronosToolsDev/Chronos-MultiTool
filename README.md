@@ -67,21 +67,21 @@ stealer, UAC bypass, and multiple persistence layers, the Free Edition is a mini
   SSH keys
 
 ### RAT commands
-info - host and OS summary
-cmd <cmd> - run a shell command
-list <path> - directory listing
-launch <p> - start a process
-processes - task list
-processkill <pid> - kill by PID
-startup - HKCU Run entries
-screenshot - full-screen capture
-webcam - webcam frame
-msgbox <txt> - popup dialog
-lock - lock workstation
-shutdown - power off
-restart - reboot
-bsod - trigger a BSOD
-kill - self-delete
+!info - host and OS summary
+!cmd <cmd> - run a shell command
+!list <path> - directory listing
+!launch <p> - start a process
+!processes - task list
+!processkill <pid> - kill by PID
+!startup - HKCU Run entries
+!screenshot - full-screen capture
+!webcam - webcam frame
+!msgbox <txt> - popup dialog
+!lock - lock workstation
+!shutdown - power off
+!restart - reboot
+!bsod - trigger a BSOD
+!kill - self-delete
 
 
 
