@@ -2,7 +2,7 @@
 
 Free builder that produces executables for the payloads
 6 working build options listed below the grabber and the rat are 
-both the most updated i gotta fix some stuff on the other ones  
+both the most updated i gotta fix some stuff on the other ones  got to releases for the exe 
 
 
 **Version:** 2.2.3 — 
