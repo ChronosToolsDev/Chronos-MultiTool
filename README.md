@@ -3,6 +3,8 @@
 Free builder that produces executables for the payloads
 6 working build options listed below the grabber and the rat are 
 both the most updated i gotta fix some stuff on the other ones  go to #releases for the exe 
+<img width="1138" height="582" alt="image" src="https://github.com/user-attachments/assets/51fec31b-5d5a-42e1-911f-6c33e05f3fc6" />
+
 
 
 **Version:** 2.2.5 — 
